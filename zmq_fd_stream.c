@@ -30,42 +30,73 @@
 
 #include "php_zmq.h"
 #include "php_zmq_private.h"
+#include "zmq_object_access.c"
 
-static size_t php_zmq_fd_read(php_stream *stream, char *buf, size_t count TSRMLS_DC)
+#ifndef PHP_WIN32
+	typedef int fd_t;
+#else
+	typedef SOCKET fd_t;
+#endif
+
+typedef struct _php_zmq_stream_container {
+	zval object;
+} php_zmq_stream_container;
+
+static
+#if PHP_VERSION_ID < 70400
+size_t
+#else
+ssize_t
+#endif
+php_zmq_fd_read(php_stream *stream, char *buf, size_t count)
 {
 	return 0;
 }
 
-static size_t php_zmq_fd_write(php_stream *stream, const char *buf, size_t count TSRMLS_DC)
+static
+#if PHP_VERSION_ID < 70400
+size_t
+#else
+ssize_t
+#endif
+php_zmq_fd_write(php_stream *stream, const char *buf, size_t count)
 {
 	return 0;
 }
 
-static int php_zmq_fd_close(php_stream *stream, int close_handle TSRMLS_DC)
+static
+int php_zmq_fd_close(php_stream *stream, int close_handle)
 {
-	zval *obj = (zval *) stream->abstract;
-	zend_objects_store_del_ref(obj TSRMLS_CC);
-	Z_DELREF_P(obj);
+	php_zmq_stream_container *container = (php_zmq_stream_container *) stream->abstract;
+	zval_ptr_dtor(&(container->object));
+	efree (container);
 	return EOF;
 }
 
-static int php_zmq_fd_flush(php_stream *stream TSRMLS_DC)
+static
+int php_zmq_fd_flush(php_stream *stream)
 {
 	return FAILURE;
 }
 
-static int php_zmq_fd_cast(php_stream *stream, int cast_as, void **ret TSRMLS_DC)
+static
+int php_zmq_fd_cast(php_stream *stream, int cast_as, void **ret)
 {
-	zval *obj = (zval *) stream->abstract;
-	php_zmq_socket_object *intern = (php_zmq_socket_object *) zend_object_store_get_object(obj TSRMLS_CC);
+	php_zmq_stream_container *container = (php_zmq_stream_container *) stream->abstract;
+	php_zmq_socket_object *intern = php_zmq_socket_fetch_object(Z_OBJ(container->object));
 
 	switch (cast_as)	{
 		case PHP_STREAM_AS_FD_FOR_SELECT:
 		case PHP_STREAM_AS_FD:
 		case PHP_STREAM_AS_SOCKETD:
 			if (ret) {
-				size_t optsiz = sizeof (int);
-				if (zmq_getsockopt(intern->socket->z_socket, ZMQ_FD, (int*) ret, &optsiz) != 0) {
+				size_t optsiz = sizeof (fd_t);
+
+				if (!intern->socket) {
+					return FAILURE;
+				}
+
+				if (zmq_getsockopt(intern->socket->z_socket, ZMQ_FD, (fd_t *) ret, &optsiz) != 0) {
 					return FAILURE;
 				}
 			}
@@ -75,7 +106,8 @@ static int php_zmq_fd_cast(php_stream *stream, int cast_as, void **ret TSRMLS_DC
 	}
 }
 
-static php_stream_ops php_stream_zmq_fd_ops = {
+static
+php_stream_ops php_stream_zmq_fd_ops = {
 	php_zmq_fd_write, php_zmq_fd_read,
 	php_zmq_fd_close, php_zmq_fd_flush,
 	"ZMQ_FD",
@@ -85,14 +117,16 @@ static php_stream_ops php_stream_zmq_fd_ops = {
 	NULL  /* set_option */
 };
 
-php_stream *php_zmq_create_zmq_fd(zval *obj TSRMLS_DC)
+php_stream *php_zmq_create_zmq_fd(zval *obj)
 {
 	php_stream *stream;
-	stream = php_stream_alloc(&php_stream_zmq_fd_ops, obj, NULL, "r");
+	php_zmq_stream_container *container;
+
+	container = ecalloc(1, sizeof(php_zmq_stream_container));
+	stream = php_stream_alloc(&php_stream_zmq_fd_ops, container, NULL, "r");
 
 	if (stream) {
-		zend_objects_store_add_ref(obj TSRMLS_CC);
-		Z_ADDREF_P(obj);
+		ZVAL_COPY(&(container->object), obj);
 		return stream;
 	}
 	return NULL;

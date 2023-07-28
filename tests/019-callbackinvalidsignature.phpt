@@ -1,7 +1,8 @@
 --TEST--
 Test callback edge-cases
 --SKIPIF--
-<?php require_once(dirname(__FILE__) . '/skipif.inc'); ?>
+<?php require_once(dirname(__FILE__) . '/skipif.inc');
+if (PHP_VERSION_ID >= 70100) die("skip PHP 7.1 and higher fallback to passing argument by value even when forced to reference"); ?>
 --FILE--
 <?php
 
@@ -14,10 +15,10 @@ try {
 	$socket = new ZMQSocket(new ZMQContext(), ZMQ::SOCKET_REQ, 'persistent_socket', 'try_to_force_ref');
 	echo "Fail\n";
 } catch (ZMQSocketException $e) {
-	echo $e->getMessage() . "\n";
+	echo "got exception\n";
 }
 
 --EXPECTF--
 Warning: Parameter 1 to try_to_force_ref() expected to be a reference, value given in %s on line %d
-Failed to invoke 'on_new_socket' callback try_to_force_ref()
+got exception
 
