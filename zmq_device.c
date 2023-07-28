@@ -36,42 +36,39 @@
 
 #include "php_zmq.h"
 #include "php_zmq_private.h"
-#include "zmq_object_access.c"
 
 ZEND_EXTERN_MODULE_GLOBALS(php_zmq)
 
 static
-zend_bool s_invoke_device_cb (php_zmq_device_cb_t *cb, uint64_t current_ts)
+zend_bool s_invoke_device_cb (php_zmq_device_cb_t *cb, uint64_t current_ts TSRMLS_DC)
 {
 	zend_bool retval = 0;
-	zval params[1];
-	zval fc_retval;
+	zval **params[1];
+	zval *retval_ptr = NULL;
 
-	ZVAL_COPY(&params[0], &cb->user_data);
-
+	params [0]          = &cb->user_data;
 	cb->fci.params      = params;
 	cb->fci.param_count = 1;
 
 	/* Call the cb */
-#if PHP_VERSION_ID < 80000
 	cb->fci.no_separation  = 1;
-#endif
-	cb->fci.retval         = &fc_retval;
+	cb->fci.retval_ptr_ptr = &retval_ptr;
 
-	if (zend_call_function(&(cb->fci), &(cb->fci_cache)) == FAILURE) {
+	if (zend_call_function(&(cb->fci), &(cb->fci_cache) TSRMLS_CC) == FAILURE) {
 		if (!EG(exception)) {
-			char *func_name = php_zmq_printable_func(&cb->fci, &cb->fci_cache);
-			zend_throw_exception_ex(php_zmq_device_exception_sc_entry_get (), 0, "Failed to invoke device callback %s()", func_name);
-			zval_ptr_dtor(&params[0]);
-			efree(func_name);
+			char *buf = php_zmq_printable_func (&(cb->fci), &(cb->fci_cache) TSRMLS_CC);
+
+			zend_throw_exception_ex(php_zmq_device_exception_sc_entry_get (), 0 TSRMLS_CC, "Failed to invoke callback %s()", buf);
+			efree (buf);
 		}
 	}
-	if (!Z_ISUNDEF(fc_retval)) {
-		retval = zval_is_true(&fc_retval);
+	if (retval_ptr) {
+		convert_to_boolean(retval_ptr);
+		if (Z_BVAL_P(retval_ptr)) {
+			retval = 1;
+		}
+		zval_ptr_dtor(&retval_ptr);
 	}
-	zval_ptr_dtor(&params[0]);
-	zval_ptr_dtor(&fc_retval);
-
 	cb->scheduled_at = current_ts + cb->timeout;
 	return retval;
 }
@@ -96,7 +93,7 @@ int s_capture_message (void *socket, zmq_msg_t *msg, int more)
 }
 
 static
-int s_calculate_timeout (php_zmq_device_object *intern)
+int s_calculate_timeout (php_zmq_device_object *intern TSRMLS_DC)
 {
 	int timeout = -1;
 	uint64_t current = php_zmq_clock (ZMQ_G (clock_ctx));
@@ -133,7 +130,7 @@ int s_calculate_timeout (php_zmq_device_object *intern)
 }
 
 
-zend_bool php_zmq_device (php_zmq_device_object *intern)
+zend_bool php_zmq_device (php_zmq_device_object *intern TSRMLS_DC)
 {
 	int errno_;
 	uint64_t last_message_received;
@@ -161,8 +158,8 @@ zend_bool php_zmq_device (php_zmq_device_object *intern)
 		return 0;
 	}
 
-	front = php_zmq_socket_fetch_object(Z_OBJ(intern->front));
-	back = php_zmq_socket_fetch_object(Z_OBJ(intern->back));
+	front = (php_zmq_socket_object *)zend_object_store_get_object(intern->front TSRMLS_CC);
+	back = (php_zmq_socket_object *)zend_object_store_get_object(intern->back TSRMLS_CC);
 
 	items [0].socket = front->socket->z_socket;
 	items [0].fd = 0;
@@ -174,8 +171,8 @@ zend_bool php_zmq_device (php_zmq_device_object *intern)
 	items [1].revents = 0;
 
 	capture_sock = NULL;
-	if (!Z_ISUNDEF(intern->capture)) {
-		php_zmq_socket_object *capture = php_zmq_socket_fetch_object(Z_OBJ(intern->capture));
+	if (intern->capture) {
+		php_zmq_socket_object *capture = (php_zmq_socket_object *)zend_object_store_get_object(intern->capture TSRMLS_CC);
 		capture_sock = capture->socket->z_socket;
 	}
 
@@ -188,7 +185,7 @@ zend_bool php_zmq_device (php_zmq_device_object *intern)
 		uint64_t current_ts = 0;
 
 		/* Calculate poll_timeout based on idle / timer cb */
-		int timeout = s_calculate_timeout (intern);
+		int timeout = s_calculate_timeout (intern TSRMLS_CC);
 
 		rc = zmq_poll(&items [0], 2, timeout);
 		if (rc < 0) {
@@ -207,7 +204,7 @@ zend_bool php_zmq_device (php_zmq_device_object *intern)
 		if (intern->timer_cb.initialized && intern->timer_cb.timeout > 0) {
 			/* Is it timer to call the timer ? */
 			if (intern->timer_cb.scheduled_at <= current_ts) {
-				if (!s_invoke_device_cb (&intern->timer_cb, current_ts)) {
+				if (!s_invoke_device_cb (&intern->timer_cb, current_ts TSRMLS_CC)) {
 					zmq_msg_close (&msg);
 					return 1;
 				}
@@ -219,7 +216,7 @@ zend_bool php_zmq_device (php_zmq_device_object *intern)
 			/* Is it timer to call the idle callback ? */
 			if ((current_ts - last_message_received) >= intern->idle_cb.timeout &&
 				intern->idle_cb.scheduled_at <= current_ts) {
-				if (!s_invoke_device_cb (&intern->idle_cb, current_ts)) {
+				if (!s_invoke_device_cb (&intern->idle_cb, current_ts TSRMLS_CC)) {
 					zmq_msg_close (&msg);
 					return 1;
 				}

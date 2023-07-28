@@ -17,11 +17,11 @@ class CbStateData
 	protected $_name;
 
 	public function __construct ($name) {
-	  $this->_name = $name;
+	  $this->name = $name;
 	}
 
 	public function getName () {
-	  return $this->_name;
+	  return $this->name;
 	}
 
 	public function increment ()
@@ -58,7 +58,7 @@ $orig_cb = function ($user_data) use (&$last_called, $device) {
 				$time_elapsed = (proper_microtime () - $last_called) + 1;
 
 				if ($time_elapsed < $device->getTimerTimeout ()) {
-					echo "Called too early, only {$time_elapsed}ms elapsed, expected {$device->getTimerTimeout ()}" . PHP_EOL;
+					echo "Called too early, only ${time_elapsed}ms elapsed, expected {$device->getTimerTimeout ()}" . PHP_EOL;
 				}
 
 				$device->setTimerTimeout ($device->getTimerTimeout () + 50);

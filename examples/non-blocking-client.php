@@ -15,7 +15,7 @@ echo "Trying to send message\n";
 do {
     try {
         if ($sending) {
-            if ($queue->send("This is a message", ZMQ::MODE_DONTWAIT) !== false) {
+            if ($queue->send("This is a message", ZMQ::MODE_NOBLOCK) !== false) {
                 echo "Message sent\n";
                 $sent    = true;
                 $sending = false;
@@ -35,7 +35,7 @@ echo "Trying to receive message\n";
 do {
     try {
         if ($receiving) {
-            $message = $queue->recv (ZMQ::MODE_DONTWAIT);
+            $message = $queue->recv (ZMQ::MODE_NOBLOCK);
             
             if ($message) {
                 echo "Received message: " . $message . "\n";

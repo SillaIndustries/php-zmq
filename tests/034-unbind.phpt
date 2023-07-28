@@ -3,9 +3,8 @@ Test unbind
 --SKIPIF--
 <?php 
     require_once(dirname(__FILE__) . '/skipif.inc'); 
-	if (version_compare(ZMQ::LIBZMQ_VER, '4.1.0', '<')) {
-		die("skip Unbind doesnt work well before libzqm 4.1.x");
-	}
+	if (!in_array ('unbind', get_class_methods ('zmqsocket')))
+		die ('skip unbind not supported in libzmq version');
 ?>
 --FILE--
 <?php
@@ -13,7 +12,6 @@ Test unbind
 include dirname(__FILE__) . '/zeromq_test_helper.inc';
 
 $s = create_server();
-
 $endpoints = $s->getendpoints();
 var_dump($endpoints);
 
@@ -32,7 +30,7 @@ array(2) {
   ["bind"]=>
   array(1) {
     [0]=>
-    string(17) "inproc://php-test"
+    string(20) "tcp://127.0.0.1:5566"
   }
 }
 array(2) {

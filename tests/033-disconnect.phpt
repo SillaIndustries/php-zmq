@@ -12,16 +12,15 @@ Test disconnect
 
 include dirname(__FILE__) . '/zeromq_test_helper.inc';
 
-$s = create_server();
-$c = create_client();
-$endpoints = $c->getendpoints();
+$s = create_client();
+$endpoints = $s->getendpoints();
 var_dump($endpoints);
 
 foreach ($endpoints['connect'] as $dsn) {
-	$c->disconnect($dsn);
+	$s->disconnect($dsn);
 }
 
-var_dump ($c->getendpoints());
+var_dump ($s->getendpoints());
 echo "OK";
 
 --EXPECT--
@@ -29,7 +28,7 @@ array(2) {
   ["connect"]=>
   array(1) {
     [0]=>
-    string(17) "inproc://php-test"
+    string(20) "tcp://127.0.0.1:5566"
   }
   ["bind"]=>
   array(0) {
